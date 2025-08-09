@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "dev": "deno run --unstable-raw-imports --allow-run=git -REN --watch main.ts -v",
+    "dev": "deno run --unstable-raw-imports --allow-run=git -NEWR --watch main.ts -v",
     "compile": "deno compile --unstable-raw-imports main.ts"
   },
   "imports": {

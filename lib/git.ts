@@ -99,6 +99,8 @@ export async function addHunk(
     return;
   }
 
+  console.debug(`Adding hunk for file ${file}: ${JSON.stringify(hunks)}`);
+
   const tempFile = await Deno.makeTempFile();
 
   // Read "old" content from the index (may differ from HEAD if partially staged already)
@@ -179,7 +181,7 @@ export async function commit(message: string, amend = false): Promise<void> {
     args.push("--amend", "--no-edit");
   }
 
-  // await runCommand("git", args);
+  await runCommand("git", args);
 }
 
 export async function rebase(plans: AutorebaseResponse["rebases"]) {

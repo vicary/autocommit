@@ -49,25 +49,33 @@ export async function fetchAI<
     console.groupEnd();
   }
 
-  let responseText = response.choices[0].message.content?.split("\n") ?? [];
+  let responseText = response.choices[0].message.content;
 
-  if (responseText[0]?.startsWith("```")) {
-    responseText = responseText.slice(1);
-  }
+  {
+    const lines = responseText?.split("\n") ?? [];
 
-  if (responseText.at(-1)?.startsWith("```")) {
-    responseText = responseText.slice(0, -1);
+    if (lines[0]?.startsWith("```")) {
+      lines.splice(0, 1);
+    }
+
+    if (lines.at(-1)?.startsWith("```")) {
+      lines.splice(-1, 1);
+    }
+
+    responseText = lines.join("\n");
   }
 
   const validationResult = v.safeParse(
     schema,
-    responseText.join("\n"),
+    responseText,
   );
 
   if (!validationResult.success) {
-    throw new Error(
-      `Malformed AI response: ${JSON.stringify(validationResult.issues)}`,
+    console.error(
+      `Validation errors: ${JSON.stringify(validationResult.issues)}`,
     );
+
+    throw new Error(`Malformed AI response: ${JSON.stringify(responseText)}`);
   }
 
   return validationResult.output;

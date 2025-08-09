@@ -9,7 +9,7 @@ export async function autocommit(verbosity = 0) {
   const status = await git.getStatus(verbosity >= 4);
   if (!status.trim()) {
     if (verbosity >= 1) {
-      console.debug("[autocommit] No changes detected.");
+      console.debug(colors.gray("[autocommit] No changes to commit."));
     }
 
     return;

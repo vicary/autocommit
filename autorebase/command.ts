@@ -9,7 +9,7 @@ export async function autorebase(verbosity = 0) {
   const unpushedCommits = await git.getUnpushedCommits(verbosity >= 4);
   if (!unpushedCommits.trim()) {
     if (verbosity >= 1) {
-      console.debug(colors.gray("[autocommit] Nothing to rebase, skipping."));
+      console.debug(colors.gray("[autocommit] Nothing to rebase."));
     }
 
     return false;
