@@ -24,8 +24,9 @@ scopes event if it's common conventional commits in other projects.
 1. `deps`: Dependency-only changes, usually `chore(deps):`.
 2. `docs`: Documentation changes, usually `fix(docs):` for usage changes, and
    `chore(docs):` for misc updates.
-3. Scopes used before in the git logs can be reused when appropriate.
-4. No scopes should be used when the changes is spanning across multiple scopes,
+3. Workspaces directories (if any) can be used directly as scope name.
+4. Scopes used before in the git logs can be reused when appropriate.
+5. No scopes should be used when the changes is spanning across multiple scopes,
    but still makes sense for a single commit message.
 
 ## Analysis Steps
