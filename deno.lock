@@ -8,6 +8,7 @@
     "jsr:@std/dotenv@~0.225.5": "0.225.5",
     "jsr:@std/fmt@^1.0.8": "1.0.8",
     "jsr:@std/internal@^1.0.6": "1.0.9",
+    "jsr:@std/ulid@1": "1.0.0",
     "npm:@types/node@*": "22.15.15",
     "npm:valibot@^1.1.0": "1.1.0",
     "npm:zod@3": "3.22.4"
@@ -36,6 +37,9 @@
     },
     "@std/internal@1.0.9": {
       "integrity": "bdfb97f83e4db7a13e8faab26fb1958d1b80cc64366501af78a0aee151696eb8"
+    },
+    "@std/ulid@1.0.0": {
+      "integrity": "d41c3d27a907714413649fee864b7cde8d42ee68437d22b79d5de4f81d808780"
     }
   },
   "npm": {
@@ -62,6 +66,7 @@
       "jsr:@std/cli@^1.0.21",
       "jsr:@std/dotenv@~0.225.5",
       "jsr:@std/fmt@^1.0.8",
+      "jsr:@std/ulid@1",
       "npm:valibot@^1.1.0"
     ]
   }

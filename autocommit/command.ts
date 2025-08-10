@@ -16,23 +16,22 @@ export async function autocommit(verbosity = 0) {
   }
 
   const diff = await git.getDiff(verbosity >= 3);
-  // List untracked files
-  const news = await git.getUntrackedFiles(verbosity >= 3);
-  const logs = await git.getLogs(verbosity >= 3);
   const head = await git.getHeadCommitMessage(verbosity >= 3);
+  const logs = await git.getLogs(verbosity >= 3);
+  const news = await git.getUntrackedFiles(verbosity >= 3);
 
   const prompt = `
 # GIT STATUS:
-${status}
+${status.trim()}
 
 # GIT DIFF:
-${diff}
+${diff.trim()}
 
 # UNTRACKED FILES:
-${news}
+${news.trim()}
 
 # RECENT GIT LOGS:
-${logs}
+${logs.trim()}
 
 # CURRENT HEAD COMMIT MESSAGE:
 ${head.trim()}

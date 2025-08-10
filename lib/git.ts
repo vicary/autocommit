@@ -1,3 +1,5 @@
+import * as colors from "@std/fmt/colors";
+import { ulid } from "@std/ulid";
 import { AutorebaseResponse } from "../autorebase/schema.ts";
 import { runCommand } from "./runCommand.ts";
 
@@ -48,7 +50,7 @@ async function isBinaryFile(file: string): Promise<boolean> {
 export async function getLogs(verbose = false): Promise<string> {
   return await runCommand(
     "git",
-    ["log", "-n", "10", "--pretty=format:%H %s"],
+    ["log", "-n10", "--pretty=format:%H %s"],
     verbose,
   );
 }
@@ -57,7 +59,7 @@ export async function getUnpushedCommits(verbose = false): Promise<string> {
   try {
     return await runCommand(
       "git",
-      ["log", "-p", "@{u}..HEAD", "--pretty=format:%H %s"],
+      ["log", "-p", "--pretty=format:%H %s", "@{u}..HEAD"],
       verbose,
     );
   } catch (error) {
@@ -184,135 +186,165 @@ export async function commit(message: string, amend = false): Promise<void> {
   await runCommand("git", args);
 }
 
-export async function rebase(plans: AutorebaseResponse["rebases"]) {
-  // [ ] Debug only,  remove afterwards
-  if (1) {
-    console.log({ plans });
+export async function rebase(
+  actions: AutorebaseResponse["rebases"],
+  options?: { verbose?: boolean },
+) {
+  console.debug(actions);
+
+  if (!actions.length) return;
+
+  // From earliest affected commit to HEAD
+  const rebaseRange = await runCommand("git", [
+    // "rev-list",
+    // "--reverse",
+    // "--topo-order",
+    "log",
+    "--pretty=format:%H %s",
+    "@{u}..HEAD",
+  ])
+    .then((output) => {
+      const list = output.split("\n").filter(Boolean).toReversed().map(
+        (line) => {
+          const [hash, ...messageParts] = line.split(" ");
+          const message = messageParts.join(" ");
+          return [hash, message] as const;
+        },
+      );
+      const rebaseRootIndex = Math.min(
+        ...actions.map(({ commit }) =>
+          list.findIndex(([sha]) => sha === commit)
+        ),
+      );
+
+      if (rebaseRootIndex < 0) {
+        return;
+      }
+
+      return list.slice(rebaseRootIndex);
+    });
+
+  if (!rebaseRange) {
+    console.group(
+      colors.red(`[autorebase] Suggested rebase hash not found.`),
+    );
+    for (const { commit } of actions) {
+      console.debug(colors.gray(`- ${commit}`));
+    }
+    console.groupEnd();
     return;
   }
 
-  if (!plans.length) return;
-
-  // Map for quick lookup of desired action/message
-  const planBySha = new Map<string, { action: string; message?: string }>();
-  for (const p of plans) {
-    planBySha.set(p.commit, { action: p.action, message: p.message });
+  if (rebaseRange.length <= 1) {
+    console.info(
+      colors.gray(`[autorebase] Plan contains less than 2 steps, skipping.`),
+    );
+    return;
   }
-
-  // Gather full HEAD linear history (oldest → newest)
-  const fullListRaw = await runCommand(
-    "git",
-    ["rev-list", "--reverse", "--topo-order", "HEAD"],
-  );
-  const fullList = fullListRaw.trim().split("\n").filter(Boolean);
-
-  // Order of commits user wants (the array order is treated as final order for those commits)
-  const desiredOrder = plans.map((p) => p.commit);
-
-  // Find earliest (in current history) commit we touch
-  let earliestIndex = Infinity;
-  for (const sha of desiredOrder) {
-    const idx = fullList.indexOf(sha);
-    if (idx === -1) {
-      throw new Error(`Commit ${sha} not found on current branch`);
-    }
-    if (idx < earliestIndex) earliestIndex = idx;
-  }
-  if (!isFinite(earliestIndex)) return;
-
-  const firstTouched = fullList[earliestIndex];
 
   // Base is parent of earliest touched commit (or --root if none)
-  let baseParent: string | null = null;
-  try {
-    baseParent = (await runCommand("git", ["rev-parse", `${firstTouched}^`]))
-      .trim();
-  } catch {
-    baseParent = null; // Root commit case
-  }
-
-  // Current commits from earliest touched → HEAD in existing order
-  const affectedTail = fullList.slice(earliestIndex);
-
-  // Reconstruct final sequence:
-  // - Commits we have a plan for appear in desiredOrder (excluding dropped)
-  // - Commits after earliest touched that are NOT in plans remain in their original relative order after all planned ones unless already listed.
-  const plannedSet = new Set(desiredOrder);
-  const droppedSet = new Set(
-    plans.filter((p) => p.action === "drop").map((p) => p.commit),
+  const rebaseParent = await runCommand("git", [
+    "rev-parse",
+    `${rebaseRange[0][0]}^`,
+  ]).then(
+    (output) => output.trim(),
+    () => null,
   );
 
-  // Filter desired order to exclude dropped
-  const reordered = desiredOrder.filter((sha) => !droppedSet.has(sha));
+  const rebaseSequence = new Map<string, string>();
 
-  // Append untouched commits (not in plans) preserving order
-  for (const sha of affectedTail) {
-    if (!plannedSet.has(sha)) reordered.push(sha);
-  }
+  {
+    const rebaseSet = new Map(rebaseRange);
 
-  // Build todo lines
-  const todoLines: string[] = [];
-  for (const sha of reordered) {
-    const plan = planBySha.get(sha);
-    // Get subject for display (fallback to SHA if fails)
-    let subject = "";
-    try {
-      subject = (await runCommand("git", ["show", "-s", "--format=%s", sha]))
-        .trim();
-    } catch {
-      subject = sha.slice(0, 7);
-    }
+    for (const plan of actions) {
+      // No need to assert hash existence after rebaseRootIndex check.
+      rebaseSet.delete(plan.commit);
 
-    if (!plan) {
-      // Not modified: keep as pick
-      todoLines.push(`pick ${sha} ${subject}`);
-      continue;
-    }
+      let message = plan.message ||
+        await runCommand("git", ["show", "-s", "--format=%s", plan.commit]);
 
-    if (plan.action === "pick") {
-      todoLines.push(`pick ${sha} ${plan.message ?? subject}`);
-    } else if (plan.action === "squash") {
-      // First occurrence of a squash target must have a preceding pick of the commit it merges into.
-      // Simplicity: treat this commit as squash onto previous commit in reordered list.
-      // If it is first, fallback to pick (cannot squash without a previous commit).
-      if (todoLines.length === 0) {
-        todoLines.push(`pick ${sha} ${plan.message ?? subject}`);
-      } else {
-        // Use squash; Git will open editor unless we auto-close it.
-        todoLines.push(`squash ${sha} ${plan.message ?? subject}`);
+      message = message.trim() || ulid();
+
+      switch (plan.action) {
+        case "pick": {
+          rebaseSequence.set(plan.commit, `p ${plan.commit} ${message}`);
+          break;
+        }
+        case "reword": {
+          rebaseSequence.set(plan.commit, `r ${plan.commit} ${message}`);
+          // [ ] Find ways to bypass interactive reword session
+          break;
+        }
+        case "drop": {
+          // rebaseSequence.set(plan.commit, `d ${plan.commit} ${message}`);
+          break;
+        }
+        case "squash": {
+          rebaseSequence.set(
+            plan.commit,
+            rebaseSequence.size || rebaseParent
+              ? `s ${plan.commit} ${message}`
+              : `p ${plan.commit} ${message}`,
+          );
+          break;
+        }
       }
-    } else {
-      // drop already removed from 'reordered'; ignore
+    }
+
+    if (rebaseSet.size) {
+      // For sloppy LLM responses, append untouched commits to the end.
+      if (options?.verbose) {
+        console.group(
+          colors.red(
+            `[autorebase] Sloppy AI left untouched commits in-between, appending to the end:`,
+          ),
+        );
+        for (const [hash] of rebaseSet) {
+          console.debug(colors.gray(`- ${hash}`));
+        }
+        console.groupEnd();
+      }
+
+      for (const [hash, message] of rebaseSet) {
+        rebaseSequence.set(hash, `p ${hash} ${message}`);
+      }
     }
   }
 
-  if (!todoLines.length) {
-    return;
-  }
+  const todoContents = Array.from(rebaseSequence.values()).join("\n") + "\n";
 
-  const todoContent = todoLines.join("\n") + "\n";
+  if (options?.verbose) {
+    console.group(
+      `[autorebase] Applying rebase sequence upon ${rebaseParent ?? "--root"}:`,
+    );
+    console.debug(colors.gray(todoContents));
+    console.groupEnd();
+  }
 
   // Prepare a temp file with the todo
-  const tempTodo = await Deno.makeTempFile();
-  await Deno.writeTextFile(tempTodo, todoContent);
-
-  // Sequence editor: overwrite the file Git provides ($1) with our prepared todo
-  // Using a small shell script via sh -c
-  const sequenceEditor = `sh -c 'cat "${tempTodo}" > "$1"'`;
-
-  const env = {
-    ...Deno.env.toObject(),
-    GIT_SEQUENCE_EDITOR: sequenceEditor,
-    GIT_EDITOR: "true", // auto-accept combined squash messages
-  };
-
-  const rebaseArgs = baseParent
-    ? ["rebase", "-i", baseParent]
-    : ["rebase", "-i", "--root"];
+  const todoFile = await Deno.makeTempFile();
 
   try {
-    await runCommand("git", rebaseArgs, false, env);
+    await Deno.writeTextFile(todoFile, todoContents);
+
+    await runCommand(
+      "git",
+      ["rebase", "-i", rebaseParent ?? "--root"],
+      options?.verbose,
+      {
+        ...Deno.env.toObject(),
+
+        // Sequence editor: overwrite the file Git provides ($1) with only the
+        // first (top) contiguous block of command lines from our prepared todo,
+        // dropping anything after the first blank line (e.g. extra duplicated sections)
+        GIT_SEQUENCE_EDITOR:
+          `sh -c 'awk "NF==0{exit} {print}" "${todoFile}" > "$0"'`,
+
+        // auto-accept combined squash messages
+        GIT_EDITOR: "true",
+      },
+    );
   } finally {
-    await Deno.remove(tempTodo).catch(() => {});
+    await Deno.remove(todoFile).catch(() => {});
   }
 }

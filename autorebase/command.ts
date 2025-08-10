@@ -16,7 +16,7 @@ export async function autorebase(verbosity = 0) {
   }
 
   const prompt = `
-UNPUSHED COMMITS:
+# UNPUSHED COMMITS:
 ${unpushedCommits}
 `;
 
