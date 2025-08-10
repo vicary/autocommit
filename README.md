@@ -11,10 +11,10 @@ pushing.
 
 ## Roadmaps
 
-1. [ ] Properly retrieves git info
-1. [ ] Communicate with LLM
-1. [ ] Initial prompt optimization
-1. [ ] Whole-file commits
+1. [x] Properly retrieves git info
+1. [x] Communicate with LLM
+1. [x] Initial prompt optimization
+1. [x] Whole-file commits
 1. [ ] Partial commits (hunks)
 1. [ ] Squash local commits by looking at diffs
 1. [ ] Watch mode
