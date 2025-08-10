@@ -41,16 +41,16 @@ For a meaningful rebase plan:
   "rebases": [
     {
       "action": "pick",
-      "hash": "<hash_of_commit_to_keep>"
+      "commit": "<hash_of_commit_to_keep>"
     },
     {
       "action": "reword",
-      "hash": "<hash_of_commit_to_reword>",
+      "commit": "<hash_of_commit_to_reword>",
       "message": "<new_commit_message>"
     },
     {
       "action": "squash",
-      "hash": "<hash_of_commit_to_squash>"
+      "commit": "<hash_of_commit_to_squash>"
     }
   ]
 }
